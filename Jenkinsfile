@@ -1,18 +1,16 @@
 pipeline {
     agent any
-
     environment {
         APP_NAME    = 'auth-service'
         DEPLOY_BASE = '/opt/auth-service-deploy'
         RELEASE_DIR = "${DEPLOY_BASE}/releases/${BUILD_NUMBER}"
         HEALTH_URL  = 'http://127.0.0.1:5000/'
     }
-
     stages {
-
         stage('Build') {
             steps {
                 sh '''
+                    set -e
                     mkdir -p "$RELEASE_DIR"
                     cp -r . "$RELEASE_DIR"
                     cd "$RELEASE_DIR"
@@ -22,17 +20,14 @@ pipeline {
                 '''
             }
         }
-
         stage('Deploy') {
             steps {
                 sh '''
+                    set -e
                     cd "$RELEASE_DIR"
                     ln -sf "$DEPLOY_BASE/shared/.env" "$RELEASE_DIR/.env"
-
                     npm run migrate
-
                     ln -sfn "$RELEASE_DIR" "$DEPLOY_BASE/current"
-
                     sudo -H -u ubuntu pm2 describe $APP_NAME > /dev/null 2>&1 \
                       && sudo -H -u ubuntu pm2 reload $APP_NAME --update-env \
                       || sudo -H -u ubuntu pm2 start "$DEPLOY_BASE/current/server.js" --name $APP_NAME
@@ -40,7 +35,6 @@ pipeline {
                 '''
             }
         }
-
         stage('Health Check') {
             steps {
                 script {
@@ -63,11 +57,10 @@ pipeline {
             }
         }
     }
-
     post {
         failure {
             script {
-                echo "Health check failed — rolling back to previous release"
+                echo "Deploy or health check failed — rolling back to previous release"
                 sh '''
                     PREV_RELEASE=$(ls -1dt $DEPLOY_BASE/releases/*/ | sed -n '2p')
                     if [ -n "$PREV_RELEASE" ]; then
